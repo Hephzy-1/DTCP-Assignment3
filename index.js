@@ -9,7 +9,7 @@ const libraryDBPath = path.join(__dirname, "db", 'library.json');
 let libraryDB = [];
 
 const PORT = 3000
-const hostname = '127.0.0.1';
+const hostname = '0.0.0.0';
 
 const requestHandler = function (req, res) {
 
