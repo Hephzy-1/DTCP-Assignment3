@@ -15,19 +15,21 @@ const createBook = (req, res) => {
   req.on("end", () => {
     const parsedBody = Buffer.concat(body).toString();
     const newBook = JSON.parse(parsedBody);
-
-
+  
     fs.readFile(libraryPath, "utf8", (err, data) => {
       if (err) {
         console.log(err)
         res.writeHead(400)
         res.end("An error occured")
       }
-
-      const oldBooks = JSON.parse(data)
-      const allBooks = [...oldBooks, newBook]
-
-      fs.writeFile(libraryPath, JSON.stringify(allBooks), (err) => {
+  
+      let oldBooks = JSON.parse(data)
+      if (!Array.isArray(oldBooks)) {
+        oldBooks = []
+      }
+      oldBooks.push(newBook) // Add the new book to the oldBooks array
+  
+      fs.writeFile(libraryPath, JSON.stringify(oldBooks), (err) => { // Write back to the same file
         if (err) {
           console.log(err);
           res.writeHead(500);
@@ -35,10 +37,10 @@ const createBook = (req, res) => {
             message: 'Internal Server Error. Could not save book to database.'
           }));
         }
-
+  
         res.end(JSON.stringify(newBook));
       });
-
+  
     })
   });
 };
@@ -99,7 +101,7 @@ function updateBook(req, res) {
         }
 
         res.writeHead(200)
-        res.end("Update successfull!");
+        res.end("Update successful!");
       });
 
     })
@@ -119,50 +121,50 @@ const loanBook = (req, res) => {
     const parsedBody = Buffer.concat(body).toString();
     const loanDetails = JSON.parse(parsedBody);
 
-    // find the book in the database
-    const bookIndex = libraryDB.findIndex((book) => {
-      return book.id === loanDetails.bookId;
-    });
-
-    // Return 404 if book not found
-    if (bookIndex === -1) {
-      res.writeHead(404);
-      res.end(
-        JSON.stringify({
-          message: "Book not found",
-        })
-      );
-      return;
-    }
-    // Check if the book is already loaned out
-    if (libraryDB[bookIndex].isLoanedOut) {
-      res.writeHead(400);
-      res.end(
-        JSON.stringify({
-          message: "Book is already loaned out",
-        })
-      );
-      return;
-    }
-
-    // update the book in the database
-    libraryDB[bookIndex].isLoanedOut = true;
-    libraryDB[bookIndex].loanee = loanDetails.loanee;
-
-    // save to db
-    fs.writeFile(libraryPath, JSON.stringify(libraryDB), (err) => {
+    fs.readFile(libraryPath, "utf8", (err, data) => {
       if (err) {
         console.log(err);
-        res.writeHead(500);
-        res.end(
-          JSON.stringify({
-            message:
-              "Internal Server Error. Could not loan out book in database.",
-          })
-        );
+        res.writeHead(400);
+        res.end("An error occurred");
       }
 
-      res.end(JSON.stringify(libraryDB[bookIndex]));
+      let oldBooks = JSON.parse(data);
+      if (!Array.isArray(oldBooks)) {
+        oldBooks = []; // Initialize an empty array if oldBooks is not an array
+      }
+
+      console.log(`Searching for book with id ${loanDetails.bookId} in`, oldBooks);
+
+      const bookIndex = oldBooks.findIndex((book) => book.id === parseInt(loanDetails.bookId, 10));
+
+      if (bookIndex === -1) {
+        res.writeHead(404);
+        res.end(JSON.stringify({ message: "Book not found" }));
+        return;
+      }
+
+      if (oldBooks[bookIndex].isLoanedOut) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ message: "Book is already loaned out" }));
+        return;
+      }
+
+      oldBooks[bookIndex].isLoanedOut = true;
+      oldBooks[bookIndex].loanee = loanDetails.loanee;
+
+      fs.writeFile(libraryPath, JSON.stringify(oldBooks), (err) => {
+        if (err) {
+          console.log(err);
+          res.writeHead(500);
+          res.end(
+            JSON.stringify({
+              message: "Internal Server Error. Could not loan out book in database.",
+            })
+          );
+        }
+
+        res.end(JSON.stringify({ message: "Book loaned out successfully" }));
+      });
     });
   });
 };
@@ -179,52 +181,48 @@ const returnBook = (req, res) => {
     const parsedBody = Buffer.concat(body).toString();
     const returnDetails = JSON.parse(parsedBody);
 
-    // find the book in the database
-    const bookIndex = libraryDB.findIndex((book) => {
-      return book.id === returnDetails.bookId;
-    });
-
-    // Return 404 if book not found
-    if (bookIndex === -1) {
-      res.writeHead(404);
-      res.end(
-        JSON.stringify({
-          message: "Book not found",
-        })
-      );
-      return;
-    }
-
-    // Check if the book is actually loaned out
-    if (!libraryDB[bookIndex].isLoanedOut) {
-      res.writeHead(400); // Bad Request
-      res.end(
-        JSON.stringify({
-          message: "The book is not currently loaned out",
-        })
-      );
-      return;
-    }
-
-    // Update the book in the database to mark it as returned
-    libraryDB[bookIndex].isLoanedOut = false;
-    libraryDB[bookIndex].loanee = "";
-    libraryDB[bookIndex].loanDate = "";
-
-    // Save to database
-    fs.writeFile(libraryPath, JSON.stringify(libraryDB), (err) => {
+    fs.readFile(libraryPath, "utf8", (err, data) => {
       if (err) {
         console.log(err);
-        res.writeHead(500);
-        res.end(
-          JSON.stringify({
-            message:
-              "Internal Server Error. Could not update book in database.",
-          })
-        );
+        res.writeHead(400);
+        res.end("An error occurred");
       }
 
-      res.end(JSON.stringify(libraryDB[bookIndex]));
+      let oldBooks = JSON.parse(data);
+      if (!Array.isArray(oldBooks)) {
+        oldBooks = []; // Initialize an empty array if oldBooks is not an array
+      }
+
+      const bookIndex = oldBooks.findIndex((book) => book.id === returnDetails.bookId);
+
+      if (bookIndex === -1) {
+        res.writeHead(404);
+        res.end(JSON.stringify({ message: "Book not found" }));
+        return;
+      }
+
+      if (!oldBooks[bookIndex].isLoanedOut) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ message: "Book is not loaned out" }));
+        return;
+      }
+
+      oldBooks[bookIndex].isLoanedOut = false;
+      oldBooks[bookIndex].loanee = "";
+
+      fs.writeFile(libraryPath, JSON.stringify(oldBooks), (err) => {
+        if (err) {
+          console.log(err);
+          res.writeHead(500);
+          res.end(
+            JSON.stringify({
+              message: "Internal Server Error. Could not return book to database.",
+            })
+          );
+        }
+
+        res.end(JSON.stringify({ message: "Book returned successfully" }));
+      });
     });
   });
 };
@@ -272,7 +270,7 @@ function deleteBook(req, res) {
         }
 
         res.writeHead(200)
-        res.end("Deletion successfull!");
+        res.end("Deletion successful!");
       });
 
     })
